@@ -60,7 +60,6 @@ import (
 	"github.com/grafana/mimir/pkg/storage/sharding"
 	mimir_tsdb "github.com/grafana/mimir/pkg/storage/tsdb"
 	"github.com/grafana/mimir/pkg/storegateway/indexcache"
-	mimir_indexheader "github.com/grafana/mimir/pkg/storegateway/indexheader"
 	util_math "github.com/grafana/mimir/pkg/util/math"
 	"github.com/grafana/mimir/pkg/util/spanlogger"
 )
@@ -146,9 +145,6 @@ type BucketStore struct {
 	filterConfig             *FilterConfig
 	advLabelSets             []labelpb.ZLabelSet
 	enableCompatibilityLabel bool
-
-	// Threadpool for performing operations that block the OS thread (mmap page faults)
-	threadPool *mimir_indexheader.Threadpool
 
 	// Every how many posting offset entry we pool in heap memory. Default in Prometheus is 32.
 	postingOffsetsInMemSampling int
@@ -249,7 +245,6 @@ func NewBucketStore(
 	chunksLimiterFactory ChunksLimiterFactory,
 	seriesLimiterFactory SeriesLimiterFactory,
 	partitioner Partitioner,
-	threadPool *mimir_indexheader.Threadpool,
 	blockSyncConcurrency int,
 	enableCompatibilityLabel bool,
 	postingOffsetsInMemSampling int,
@@ -274,7 +269,6 @@ func NewBucketStore(
 		chunksLimiterFactory:        chunksLimiterFactory,
 		seriesLimiterFactory:        seriesLimiterFactory,
 		partitioner:                 partitioner,
-		threadPool:                  threadPool,
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		enableSeriesResponseHints:   enableSeriesResponseHints,
@@ -460,10 +454,6 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	)
 	if err != nil {
 		return errors.Wrap(err, "create index header reader")
-	}
-
-	if s.threadPool != nil {
-		indexHeaderReader = mimir_indexheader.NewThreadedReader(s.threadPool, indexHeaderReader)
 	}
 
 	defer func() {
